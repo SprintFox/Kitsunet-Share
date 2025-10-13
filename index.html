@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kitsunet Share</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <div class="sidebar">
+      <h2>Files 📦</h2>
+      <ul id="file-list">
+        <!-- File items will be rendered here by JS -->
+      </ul>
+      <div class="button-group">
+        <button id="add-file-btn">Attach file 📎</button>
+      </div>
+    </div>
+    <div class="main-content">
+      <button id="settings-btn">⚙️</button>
+      <div class="radar">
+        <div class="radar-dot self">Me</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Offer Modal -->
+  <div id="file-offer-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="file-offer-title">Incoming transfer</h3>
+            <button id="file-offer-close-button" class="close-btn" data-close-modal="file-offer-modal">&times;</button>
+        </div>
+        <ul id="incoming-file-list">
+            <!-- Incoming file items will be rendered here -->
+        </ul>
+        <div class="modal-buttons">
+            <button id="decline-offer-btn" class="btn btn-danger">Decline</button>
+            <button id="accept-offer-btn" class="btn btn-success">Accept</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h3>Settings</h3>
+              <button class="close-btn" data-close-modal="settings-modal">&times;</button>
+          </div>
+          <div class="form-group">
+              <label for="username-input">Network name</label>
+              <input type="text" id="username-input">
+          </div>
+          <div class="form-group">
+              <label>Show me in network</label>
+              <label class="switch">
+                  <input type="checkbox" id="broadcast-toggle">
+                  <span class="slider"></span>
+              </label>
+          </div>
+          <div class="form-group">
+              <label for="network-interface-select">Network interface for broadcast</label>
+              <select id="network-interface-select"></select>
+          </div>
+      </div>
+  </div>
+
+
+  <button id="dynamic-send-btn" style="display: none;">Send 🚀</button>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
