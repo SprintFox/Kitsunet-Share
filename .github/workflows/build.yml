@@ -1,0 +1,145 @@
+name: Build Tauri App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+    steps:
+      - name: Generate unified tag
+        id: tag
+        run: echo "value=v$(date -u +'%Y.%m%d.%H%M%S')" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            os: linux
+          - platform: windows-latest
+            os: windows
+          - platform: macos-latest
+            os: macos
+
+    runs-on: ${{ matrix.platform }}
+    env:
+      UNIFIED_TAG: ${{ needs.prepare.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            pkg-config \
+            build-essential \
+            curl \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+          pkg-config --list-all | grep gtk || true
+          pkg-config --cflags gtk+-3.0
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri build
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          mkdir -p installers
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            find src-tauri/target/release/bundle -name "*.msi" -exec cp {} installers/ \;
+            find src-tauri/target/release/bundle -name "*.exe" -exec cp {} installers/ \;
+          elif [[ "${{ matrix.os }}" == "macos" ]]; then
+            find src-tauri/target/release/bundle -name "*.dmg" -exec cp {} installers/ \;
+            find src-tauri/target/release/bundle -name "*.app" -type d -exec zip -r {}.zip {} \; && mv src-tauri/target/release/bundle/*.app.zip installers/ 2>/dev/null || true
+          elif [[ "${{ matrix.os }}" == "linux" ]]; then
+            find src-tauri/target/release/bundle -name "*.AppImage" -exec cp {} installers/ \;
+            find src-tauri/target/release/bundle -name "*.rpm" -exec cp {} installers/ \;
+            find src-tauri/target/release/bundle -name "*.deb" -exec cp {} installers/ \;
+          fi
+          
+          echo "Collected installers:"
+          ls -la installers/
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-installers-${{ env.UNIFIED_TAG }}
+          path: installers/
+
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: installers
+          pattern: '*-installers-*'
+          merge-multiple: false
+
+      - name: List downloaded installers
+        run: |
+          echo "=== Downloaded installers ==="
+          find installers -type f -name "*" | while read file; do
+            echo "Found: $file"
+          done
+
+      - name: Flatten installers structure
+        run: |
+          mkdir -p flattened_installers
+          find installers -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.app.zip" \) -exec cp {} flattened_installers/ \;
+          
+          echo "=== Final installers to release ==="
+          ls -la flattened_installers/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Release ${{ needs.prepare.outputs.tag }}
+          body: |
+            Automated release built for all platforms
+            
+            **Installers included:**
+            - Windows: .msi and .exe installers
+            - macOS: .dmg disk image
+            - Linux: .AppImage, .rpm and .deb packages (Built on Ubuntu 22.04 for GLIBC 2.35 compatibility)
+            
+            Built from commit: ${{ github.sha }}
+          files: flattened_installers/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
